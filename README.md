@@ -156,7 +156,7 @@ rotation, and network-isolated coverage summaries.
 - Public repository: available on [GitHub](https://github.com/guoqiangliu-ocean/oddpulse)
 - Public deployment: available — [live MVP](https://oddpulse-agent.oddpulse-txline-2026.workers.dev/)
 - Demo video: available as an [unlisted YouTube walkthrough](https://youtu.be/X7bHzndiUsc)
-- Superteam submission: not submitted
+- Superteam submission: submitted to [Trading Tools and Agents](https://superteam.fun/earn/listing/trading-tools-and-agents) on 2026-07-14
 
 OddPulse is decision support, not a betting executor and not a guarantee of
 profit.

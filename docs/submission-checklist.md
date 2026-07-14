@@ -57,5 +57,6 @@ Deadline: 2026-07-19 23:59:59 UTC (2026-07-20 03:59:59 Asia/Dubai)
   device-local retention, deterministic tests, and explicit data provenance
 
 The public repository, deployed MVP, and reviewer-accessible demo video are
-available. Superteam submission is still pending. No wallet secret or API token
-is included in this checklist.
+available. OddPulse was submitted to the Superteam Trading Tools and Agents
+track on 2026-07-14 through its human-owned profile; the listing now shows
+`Edit Submission`. No wallet secret or API token is included in this checklist.
