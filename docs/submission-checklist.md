@@ -1,4 +1,4 @@
-# TxODDS Trading Tools and Agents — local checklist
+# TxODDS Trading Tools and Agents — submission checklist
 
 Deadline: 2026-07-19 23:59:59 UTC (2026-07-20 03:59:59 Asia/Dubai)
 
@@ -14,13 +14,13 @@ Deadline: 2026-07-19 23:59:59 UTC (2026-07-20 03:59:59 Asia/Dubai)
 
 ## Required submission items
 
-- [ ] Public demo video, maximum five minutes
-- [ ] Public GitHub or GitLab repository
-- [ ] Brief project explanation
+- [x] Reviewer-accessible demo video, maximum five minutes
+- [x] Public GitHub repository
+- [x] Brief project explanation
 - [x] Project title: OddPulse
-- [ ] Publicly accessible working MVP
-- [ ] Optional technical documentation link
-- [ ] TxLINE API feedback: strongest feature and friction encountered
+- [x] Publicly accessible working MVP
+- [x] Technical documentation in the public repository
+- [x] TxLINE API feedback: strongest feature and friction encountered
 - [ ] Optional project X profile or post
 
 ## Product qualification
@@ -30,7 +30,7 @@ Deadline: 2026-07-19 23:59:59 UTC (2026-07-20 03:59:59 Asia/Dubai)
 - [x] Replay data is clearly labelled
 - [x] TxLINE snapshot adapter and documented field normalization
 - [x] Activated TxLINE Devnet token and free-tier subscription
-- [x] Authenticated Devnet fixture and odds snapshots connected to the local UI
+- [x] Authenticated Devnet fixture and odds snapshots connected to the local and deployed UI
 - [x] Device-local authenticated history with visible-tab polling, exact
   instrument identity, deduplication, retention, and secret-field whitelisting
 - [x] Raw-only and single-source histories are blocked from confirmed-signal claims
@@ -42,12 +42,12 @@ Deadline: 2026-07-19 23:59:59 UTC (2026-07-20 03:59:59 Asia/Dubai)
   provenance checks, retry backoff, and per-fixture coverage status
 - [ ] Live signal history with sufficient same-instrument, multi-source pairing;
   current signal output remains explicitly labelled synthetic replay
-- [ ] Public deployment and functional endpoint
+- [x] Public deployment and functional endpoint
 
 ## Judging alignment
 
 - Core functionality and ingestion: paired-provider detector, server adapter,
-  and authenticated Devnet snapshot access in the local UI
+  and authenticated Devnet snapshot access in the deployed UI
 - Autonomous operation: interval-driven evaluation with no manual decision input
 - Logic and architecture: fair-probability and log-odds thresholds, breadth filter,
   source-pairing, line isolation, explainable confidence
@@ -56,5 +56,6 @@ Deadline: 2026-07-19 23:59:59 UTC (2026-07-20 03:59:59 Asia/Dubai)
 - Production readiness: secret isolation, guest-session renewal, responsive desk,
   device-local retention, deterministic tests, and explicit data provenance
 
-No public repository, deployment, demo video, upload, or submission has been
-performed. No wallet secret or API token is included in this checklist.
+The public repository, deployed MVP, and reviewer-accessible demo video are
+available. Superteam submission is still pending. No wallet secret or API token
+is included in this checklist.

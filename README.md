@@ -8,7 +8,7 @@ demonstrates an explainable movement policy in a clearly separated replay.
 
 - Source code: [GitHub](https://github.com/guoqiangliu-ocean/oddpulse)
 - Demo video: [YouTube walkthrough](https://youtu.be/X7bHzndiUsc)
-- Live MVP: pending public deployment
+- Live MVP: [Open OddPulse](https://oddpulse-agent.oddpulse-txline-2026.workers.dev/)
 
 ## What it does
 
@@ -141,10 +141,11 @@ rotation, and network-isolated coverage summaries.
 ## Current status
 
 - Local interactive MVP: complete
+- Publicly accessible MVP deployment: complete — [open OddPulse](https://oddpulse-agent.oddpulse-txline-2026.workers.dev/)
 - Deterministic detector and tests: complete
 - Server-side TxLINE adapter: complete
 - Dedicated Devnet wallet and free four-week Level 1 subscription: complete
-- TxLINE API activation and authenticated local snapshot access: complete
+- TxLINE API activation and authenticated local and deployed snapshot access: complete
 - Device-local authenticated snapshot history, polling, deduplication, and
   conservative eligibility display: complete
 - Exact-series evidence timeline, evidence rows, and local CSV export: complete
@@ -153,7 +154,7 @@ rotation, and network-isolated coverage summaries.
 - Live signal history and multi-source quote pairing: not yet available; the
   dashboard signal output remains explicitly labelled synthetic replay
 - Public repository: available on [GitHub](https://github.com/guoqiangliu-ocean/oddpulse)
-- Public deployment: pending
+- Public deployment: available — [live MVP](https://oddpulse-agent.oddpulse-txline-2026.workers.dev/)
 - Demo video: available as an [unlisted YouTube walkthrough](https://youtu.be/X7bHzndiUsc)
 - Superteam submission: not submitted
 
