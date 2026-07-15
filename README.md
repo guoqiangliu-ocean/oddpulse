@@ -18,6 +18,9 @@ demonstrates an explainable movement policy in a clearly separated replay.
 - requires directional breadth across matched sources before confirming an alert;
 - labels price changes following a score or match-state change separately;
 - records the action, confidence, evidence, and virtual or source timestamp;
+- accepts a live probability only from a complete, coherent market vector;
+- exposes a separate quote-proof receipt that fails closed until a read-only
+  TxLINE Devnet validation passes;
 - runs without human input once the feed is configured.
 
 The included dashboard is fully interactive. An activated Devnet credential now
@@ -37,6 +40,9 @@ flowchart LR
   A[TxLINE fixtures and odds] --> B[Server-only adapter]
   B --> C[Schema normalizer]
   C --> H[Authenticated snapshot status and local UI]
+  B --> P[Server-only quote proof gate]
+  P --> Q[Read-only validateOdds simulation]
+  Q --> H
   H --> I[Device-local deduplicated history]
   I --> J[Strict movement eligibility check]
   R[Deterministic paired replay] --> D[Paired quote store]
@@ -50,6 +56,10 @@ short-lived guest JWT, retries once after a `401`, normalizes both documented
 field-name variants, and returns only the fields needed by the product.
 Local history persists only those normalized public fields. Missing upstream
 timestamps remain missing rather than being replaced with local retrieval time.
+Only fixtures in the current authenticated World Cup catalogue can be queried.
+A vector is shown as probability only when every outcome is present and the
+whole vector has one plausible fraction or percentage scale; all other values
+remain explicitly unavailable.
 
 ## Detector policy
 
@@ -119,6 +129,29 @@ public repository.
 - No wallet secret or API token is committed to the repository or sent to the
   browser.
 
+## Quote proof receipt
+
+For a selected authenticated World Cup fixture, the browser may request the
+same-origin endpoint:
+
+```text
+GET /api/txline-proof?fixtureId=<authenticated-fixture-id>
+```
+
+The server selects an exact quote carrying a message ID and source timestamp,
+requests a compatible odds-proof record, checks that its fixture/message/time
+match the selected quote, and validates its schema before deriving the daily
+odds-root PDA. It then invokes `validateOdds` with Solana RPC read-only
+simulation (`sigVerify: false` with a replacement blockhash). It never asks a
+wallet to sign and never submits a transaction.
+
+`VERIFIED_ONCHAIN` is emitted only after that exact simulation returns `true`.
+`PROOF_FETCHED` means a proof was received but did not pass validation;
+`AWAITING_PROOF` means the selected snapshot lacks a proof-eligible quote;
+`UNAVAILABLE` means no badge was issued. The browser receives a minimal record
+summary and status, never a TxLINE credential, raw proof payload, Merkle path,
+or RPC request detail.
+
 Official references:
 
 - [World Cup free tier](https://txline.txodds.com/documentation/worldcup)
@@ -132,11 +165,12 @@ npm run build
 npm test
 ```
 
-The 20 tests cover broad multi-provider movement, rogue-source rejection,
+The automated suite covers broad multi-provider movement, rogue-source rejection,
 fair-probability normalization, exact instrument matching, authenticated-history
 provenance, deduplication, retention, raw-only ineligibility, conflict handling,
 exact-series separation, CSV escaping, credential whitelisting, safe fixture
-rotation, and network-isolated coverage summaries.
+rotation, network-isolated coverage summaries, complete-vector rejection,
+signed-byte proof parsing, and proof schema mismatch rejection.
 
 ## Current status
 
@@ -151,6 +185,10 @@ rotation, and network-isolated coverage summaries.
 - Exact-series evidence timeline, evidence rows, and local CSV export: complete
 - Visible-tab collection across every explicitly labelled World Cup fixture,
   with selected/round-robin separation and per-fixture coverage status: complete
+- Complete-vector probability gate and authenticated World Cup fixture allowlist:
+  complete
+- Read-only quote-proof receipt: complete in the release candidate; it stays
+  pending or unavailable unless a live Devnet `validateOdds` simulation passes
 - Live signal history and multi-source quote pairing: not yet available; the
   dashboard signal output remains explicitly labelled synthetic replay
 - Public repository: available on [GitHub](https://github.com/guoqiangliu-ocean/oddpulse)
@@ -160,3 +198,16 @@ rotation, and network-isolated coverage summaries.
 
 OddPulse is decision support, not a betting executor and not a guarantee of
 profit.
+
+## Deployment check
+
+Build and deploy through the existing Cloudflare Worker workflow. The TxLINE
+secret is already provisioned and must not be printed or re-entered during an
+ordinary release. After deployment, check `/`, `/api/txline`, an authenticated
+fixture snapshot, and `/api/txline-proof?fixtureId=<current-fixture-id>`. The
+proof endpoint must return `Cache-Control: no-store`, `transactionSubmitted:
+false`, and no credential or raw proof payload. A non-verified proof status is
+an expected safe outcome until the live proof and Devnet simulation both pass.
+
+The Worker also sets a restrictive Content Security Policy, blocks framing, and
+disables camera, microphone, geolocation, payment, and USB permissions.

@@ -1,5 +1,6 @@
 import vinext from "vinext";
 import { defineConfig } from "vite";
+import { fileURLToPath } from "node:url";
 import hostingConfig from "./.openai/hosting.json";
 import { sites } from "./build/sites-vite-plugin";
 
@@ -32,6 +33,8 @@ export default defineConfig(async ({ command }) => {
             TXLINE_BASE_URL: process.env.TXLINE_BASE_URL ?? "",
             TXLINE_NETWORK: process.env.TXLINE_NETWORK ?? "",
             TXLINE_SESSION_JWT: process.env.TXLINE_SESSION_JWT ?? "",
+            TXLINE_RPC_URL: process.env.TXLINE_RPC_URL ?? "",
+            TXLINE_VIEW_PAYER: process.env.TXLINE_VIEW_PAYER ?? "",
           }
         : {},
     d1_databases: d1
@@ -54,6 +57,18 @@ export default defineConfig(async ({ command }) => {
   };
 
   return {
+    resolve: {
+      // Anchor's browser ESM build keeps read-only Program/Provider view calls
+      // compatible with the Worker runtime without its Node-only loader.
+      alias: {
+        "@coral-xyz/anchor": fileURLToPath(
+          new URL(
+            "./node_modules/@coral-xyz/anchor/dist/browser/index.js",
+            import.meta.url,
+          ),
+        ),
+      },
+    },
     server: isCodexSeatbeltSandbox
       ? { watch: { useFsEvents: false, usePolling: true } }
       : undefined,

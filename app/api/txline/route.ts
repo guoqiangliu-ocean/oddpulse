@@ -1,238 +1,137 @@
-import { env as workerEnv } from "cloudflare:workers";
+import {
+  listWorldCupFixtures,
+  loadOddsSnapshot,
+  txLineConfigured,
+  txLineNetwork,
+} from "../../lib/txline-client.ts";
+import { normalizeProbabilityVector } from "../../lib/txline-normalize.ts";
 
-type TxLineFixture = {
-  FixtureId?: number;
-  fixtureId?: number;
-  Participant1?: string;
-  participant1?: string;
-  Participant2?: string;
-  participant2?: string;
-  Participant1IsHome?: boolean;
-  participant1IsHome?: boolean;
-  StartTime?: string | number;
-  startTime?: string | number;
-  Competition?: string;
-  competition?: string;
-  GameState?: string | number;
-  gameState?: string | number;
+type JsonRecord = Record<string, unknown>;
+
+const jsonHeaders = { "Cache-Control": "no-store" };
+
+const record = (value: unknown): JsonRecord =>
+  value && typeof value === "object" && !Array.isArray(value)
+    ? (value as JsonRecord)
+    : {};
+
+const read = (source: unknown, ...keys: string[]) => {
+  const sourceRecord = record(source);
+  for (const key of keys) {
+    if (sourceRecord[key] !== undefined && sourceRecord[key] !== null) {
+      return sourceRecord[key];
+    }
+  }
+  return undefined;
 };
 
-type TxLineMarket = {
-  FixtureId?: number;
-  fixtureId?: number;
-  Ts?: number;
-  ts?: number;
-  Bookmaker?: string;
-  bookmaker?: string;
-  SuperOddsType?: string;
-  superOddsType?: string;
-  MarketParameters?: string;
-  marketParameters?: string;
-  MarketPeriod?: string;
-  marketPeriod?: string;
-  PriceNames?: string[];
-  priceNames?: string[];
-  Prices?: number[];
-  prices?: number[];
-  Pct?: string[];
-  pct?: string[];
-  InRunning?: boolean;
-  inRunning?: boolean;
-  GameState?: string;
-  gameState?: string;
+const textValue = (value: unknown, fallback = "") => {
+  if (typeof value !== "string") return fallback;
+  return value.normalize("NFC").trim().replace(/\s+/g, " ").slice(0, 180);
 };
 
-type RuntimeKey =
-  | "TXLINE_API_TOKEN"
-  | "TXLINE_BASE_URL"
-  | "TXLINE_NETWORK"
-  | "TXLINE_SESSION_JWT";
-
-const runtimeValue = (key: RuntimeKey) => {
-  const binding = (workerEnv as unknown as Partial<Record<RuntimeKey, string>>)[
-    key
-  ];
-  return binding || process.env[key];
+const finiteNumber = (value: unknown) => {
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
 };
 
-const configured = () => Boolean(runtimeValue("TXLINE_API_TOKEN"));
+const values = (value: unknown) => (Array.isArray(value) ? value : []);
 
-const baseUrl = () =>
-  (runtimeValue("TXLINE_BASE_URL") || "https://txline-dev.txodds.com").replace(
-    /\/$/,
-    "",
-  );
-
-const network = () =>
-  runtimeValue("TXLINE_NETWORK") ||
-  (baseUrl().includes("txline-dev") ? "devnet" : "mainnet");
-
-let guestSession: { token: string; expiresAt: number } | null =
-  runtimeValue("TXLINE_SESSION_JWT")
-    ? {
-        token: runtimeValue("TXLINE_SESSION_JWT")!,
-        expiresAt: Date.now() + 60_000,
-      }
-    : null;
-let guestRefresh: Promise<string> | null = null;
-
-async function getGuestJwt(forceRefresh = false) {
-  if (!forceRefresh && guestSession && guestSession.expiresAt > Date.now()) {
-    return guestSession.token;
-  }
-
-  if (!guestRefresh) {
-    guestRefresh = fetch(`${baseUrl()}/auth/guest/start`, {
-      method: "POST",
-      headers: { Accept: "application/json" },
-      cache: "no-store",
-    })
-      .then(async (response) => {
-        if (!response.ok) {
-          throw new Error(`TxLINE guest auth responded with ${response.status}`);
-        }
-        const body = (await response.json()) as { token?: string };
-        if (!body.token) throw new Error("TxLINE guest auth returned no token");
-        guestSession = {
-          token: body.token,
-          expiresAt: Date.now() + 8 * 60_000,
-        };
-        return body.token;
-      })
-      .finally(() => {
-        guestRefresh = null;
-      });
-  }
-
-  return guestRefresh;
-}
-
-const upstreamHeaders = (jwt: string) => ({
-  Authorization: `Bearer ${jwt}`,
-  "X-Api-Token": runtimeValue("TXLINE_API_TOKEN") || "",
-  Accept: "application/json",
-});
-
-async function fetchUpstream(path: string) {
-  let jwt = await getGuestJwt();
-  let response = await fetch(`${baseUrl()}${path}`, {
-    headers: upstreamHeaders(jwt),
-    cache: "no-store",
-  });
-  if (response.status === 401) {
-    jwt = await getGuestJwt(true);
-    response = await fetch(`${baseUrl()}${path}`, {
-      headers: upstreamHeaders(jwt),
-      cache: "no-store",
-    });
-  }
-  if (!response.ok) {
-    throw new Error(`TxLINE responded with ${response.status}`);
-  }
-  return response.json();
-}
-
-function normalizeFixture(raw: TxLineFixture) {
-  const participant1 = raw.Participant1 ?? raw.participant1 ?? "Participant 1";
-  const participant2 = raw.Participant2 ?? raw.participant2 ?? "Participant 2";
-  const participant1IsHome =
-    raw.Participant1IsHome ?? raw.participant1IsHome ?? true;
+function normalizeMarket(raw: unknown) {
+  const names = values(read(raw, "PriceNames", "priceNames"));
+  const prices = values(read(raw, "Prices", "prices"));
+  const percentages = values(read(raw, "Pct", "pct"));
+  const probabilities = normalizeProbabilityVector(names, percentages);
   return {
-    fixtureId: raw.FixtureId ?? raw.fixtureId,
-    participant1,
-    participant2,
-    participant1IsHome,
-    home: participant1IsHome ? participant1 : participant2,
-    away: participant1IsHome ? participant2 : participant1,
-    startTime: raw.StartTime ?? raw.startTime,
-    competition: raw.Competition ?? raw.competition ?? "unknown",
-    gameState: raw.GameState ?? raw.gameState ?? "unknown",
-  };
-}
-
-function normalizeMarket(raw: TxLineMarket) {
-  const names = raw.PriceNames ?? raw.priceNames ?? [];
-  const prices = raw.Prices ?? raw.prices ?? [];
-  const percentages = raw.Pct ?? raw.pct ?? [];
-  return {
-    fixtureId: raw.FixtureId ?? raw.fixtureId,
+    fixtureId: finiteNumber(read(raw, "FixtureId", "fixtureId")),
     // Missing upstream time must stay missing. Using retrieval time here would
     // create artificial history and could make repeated polls look like a move.
-    timestamp: raw.Ts ?? raw.ts ?? null,
-    provider: raw.Bookmaker ?? raw.bookmaker ?? "TxLINE StablePrice",
-    market: raw.SuperOddsType ?? raw.superOddsType ?? "unknown",
-    parameters: raw.MarketParameters ?? raw.marketParameters ?? "",
-    period: raw.MarketPeriod ?? raw.marketPeriod ?? "match",
-    inRunning: raw.InRunning ?? raw.inRunning ?? false,
-    gameState: raw.GameState ?? raw.gameState ?? "unknown",
-    outcomes: names.map((name, index) => {
-      const percentage = percentages[index];
-      const parsed = percentage && percentage !== "NA" ? Number(percentage) : null;
-      return {
-        name,
-        rawPrice: prices[index] ?? null,
-        probability:
-          parsed === null || !Number.isFinite(parsed)
-            ? null
-            : parsed > 1
-              ? parsed / 100
-              : parsed,
-      };
-    }),
+    timestamp: finiteNumber(read(raw, "Ts", "ts")),
+    provider: textValue(read(raw, "Bookmaker", "bookmaker"), "TxLINE StablePrice"),
+    market: textValue(read(raw, "SuperOddsType", "superOddsType"), "unknown"),
+    parameters: textValue(read(raw, "MarketParameters", "marketParameters")),
+    period: textValue(read(raw, "MarketPeriod", "marketPeriod"), "match"),
+    inRunning: read(raw, "InRunning", "inRunning") === true,
+    gameState: read(raw, "GameState", "gameState") ?? "unknown",
+    outcomes: names.map((name, index) => ({
+      name: textValue(name, `Outcome ${index + 1}`),
+      rawPrice: finiteNumber(prices[index]),
+      probability: probabilities[index] ?? null,
+    })),
   };
 }
 
 export async function GET(request: Request) {
-  const url = new URL(request.url);
-  const fixtureId = url.searchParams.get("fixtureId");
-
-  if (!configured()) {
-    return Response.json({
-      configured: false,
-      mode: "schema-compatible replay",
-      network: network(),
-      message:
-        "TxLINE credentials are not configured. The dashboard is using an explicitly labelled deterministic replay.",
-    });
+  if (!txLineConfigured()) {
+    return Response.json(
+      {
+        configured: false,
+        mode: "schema-compatible replay",
+        network: txLineNetwork(),
+        message:
+          "TxLINE credentials are not configured. The dashboard is using an explicitly labelled deterministic replay.",
+      },
+      { headers: jsonHeaders },
+    );
   }
 
+  const url = new URL(request.url);
+  const fixtureParam = url.searchParams.get("fixtureId");
   try {
-    if (fixtureId) {
-      const raw = (await fetchUpstream(
-        `/api/odds/snapshot/${encodeURIComponent(fixtureId)}`,
-      )) as TxLineMarket[];
-      return Response.json({
-        configured: true,
-        network: network(),
-        mode: "authenticated-snapshot",
-        fetchedAt: Date.now(),
-        markets: raw.map(normalizeMarket),
-      });
+    const fixtures = await listWorldCupFixtures();
+    if (!fixtureParam) {
+      return Response.json(
+        {
+          configured: true,
+          network: txLineNetwork(),
+          mode: "authenticated-snapshot",
+          fetchedAt: Date.now(),
+          fixtures,
+        },
+        { headers: jsonHeaders },
+      );
     }
 
-    const raw = (await fetchUpstream("/api/fixtures/snapshot")) as TxLineFixture[];
-    return Response.json({
-      configured: true,
-      network: network(),
-      mode: "authenticated-snapshot",
-      fetchedAt: Date.now(),
-      fixtures: raw
-        .map(normalizeFixture)
-        .filter(
-          (fixture) =>
-            Number.isSafeInteger(fixture.fixtureId) &&
-            Number(fixture.fixtureId) > 0,
-        ),
-    });
-  } catch (error) {
+    if (!/^\d+$/.test(fixtureParam)) {
+      return Response.json(
+        { code: "INVALID_FIXTURE", message: "Fixture ID is invalid." },
+        { status: 400, headers: jsonHeaders },
+      );
+    }
+    const fixtureId = Number(fixtureParam);
+    const fixture = fixtures.find((item) => item.fixtureId === fixtureId);
+    if (!Number.isSafeInteger(fixtureId) || fixtureId < 1 || !fixture) {
+      return Response.json(
+        {
+          code: "FIXTURE_NOT_AVAILABLE",
+          message: "Fixture is outside the authenticated World Cup catalogue.",
+        },
+        { status: 404, headers: jsonHeaders },
+      );
+    }
+
+    const raw = await loadOddsSnapshot(fixtureId);
+    return Response.json(
+      {
+        configured: true,
+        network: txLineNetwork(),
+        mode: "authenticated-snapshot",
+        fetchedAt: Date.now(),
+        markets: raw
+          .map(normalizeMarket)
+          .filter((market) => market.fixtureId === fixtureId),
+      },
+      { headers: jsonHeaders },
+    );
+  } catch {
     return Response.json(
       {
         configured: true,
         upstreamAvailable: false,
-        message:
-          error instanceof Error ? error.message : "TxLINE request failed",
+        code: "TXLINE_UNAVAILABLE",
+        message: "The authenticated TxLINE snapshot is temporarily unavailable.",
       },
-      { status: 502 },
+      { status: 502, headers: jsonHeaders },
     );
   }
 }

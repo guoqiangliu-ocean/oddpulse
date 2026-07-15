@@ -64,6 +64,25 @@ type SnapshotState = {
   message: string;
 };
 
+type QuoteProofState = {
+  status:
+    | "idle"
+    | "loading"
+    | "verified"
+    | "fetched"
+    | "awaiting"
+    | "unavailable"
+    | "error";
+  fixtureId: number | null;
+  sourceTimestamp: number | null;
+  provider: string | null;
+  market: string | null;
+  messageId: string | null;
+  dailyOddsPda: string | null;
+  treeNodes: number;
+  message: string;
+};
+
 type LocalHistoryState = {
   status: "idle" | "loading" | "ready" | "unsupported" | "error";
   history: LocalSnapshotEnvelope[];
@@ -166,6 +185,21 @@ function formatSnapshotTime(timestamp: string | number | null) {
   return `${date.toISOString().slice(0, 10)} ${date
     .toISOString()
     .slice(11, 19)} UTC`;
+}
+
+function abbreviateRecordId(value: string | null) {
+  if (!value) return "—";
+  return value.length <= 18 ? value : `${value.slice(0, 9)}…${value.slice(-7)}`;
+}
+
+function quoteProofStatusLabel(status: QuoteProofState["status"]) {
+  if (status === "verified") return "VERIFIED ONCHAIN";
+  if (status === "fetched") return "PROOF FETCHED · NOT VERIFIED";
+  if (status === "awaiting") return "AWAITING PROOF";
+  if (status === "unavailable") return "PROOF UNAVAILABLE";
+  if (status === "error") return "PROOF CHECK FAILED";
+  if (status === "loading") return "CHECKING BATCH PROOF";
+  return "WAITING FOR QUOTE";
 }
 
 function snapshotOutcomeLabel(
@@ -306,6 +340,17 @@ export function OddPulseDashboard() {
     markets: [],
     fetchedAt: null,
     message: "Waiting for an authenticated TxLINE snapshot.",
+  });
+  const [quoteProof, setQuoteProof] = useState<QuoteProofState>({
+    status: "idle",
+    fixtureId: null,
+    sourceTimestamp: null,
+    provider: null,
+    market: null,
+    messageId: null,
+    dailyOddsPda: null,
+    treeNodes: 0,
+    message: "Select an authenticated quote to request a read-only proof check.",
   });
   const [localHistory, setLocalHistory] = useState<LocalHistoryState>({
     status: "idle",
@@ -484,7 +529,12 @@ export function OddPulseDashboard() {
     return () => {
       cancelled = true;
     };
-  }, [connector.network, connector.status, worldCupFixtureKey]);
+  }, [
+    connector.network,
+    connector.status,
+    worldCupFixtureIds,
+    worldCupFixtureKey,
+  ]);
 
   useEffect(() => {
     if (selectedSnapshotId === null) return;
@@ -888,6 +938,7 @@ export function OddPulseDashboard() {
     connector.status,
     selectedSnapshotId,
     tabVisible,
+    worldCupFixtureIds,
     worldCupFixtureKey,
   ]);
 
@@ -973,6 +1024,130 @@ export function OddPulseDashboard() {
     },
     null,
   );
+  useEffect(() => {
+    if (selectedSnapshotId === null || connector.status !== "ready") {
+      setQuoteProof({
+        status: "idle",
+        fixtureId: null,
+        sourceTimestamp: null,
+        provider: null,
+        market: null,
+        messageId: null,
+        dailyOddsPda: null,
+        treeNodes: 0,
+        message: "Select an authenticated quote to request a read-only proof check.",
+      });
+      return;
+    }
+
+    const controller = new AbortController();
+    setQuoteProof({
+      status: "loading",
+      fixtureId: selectedSnapshotId,
+      sourceTimestamp: null,
+      provider: null,
+      market: null,
+      messageId: null,
+      dailyOddsPda: null,
+      treeNodes: 0,
+      message: "Requesting a proof receipt for the selected authenticated quote.",
+    });
+    fetch(`/api/txline-proof?fixtureId=${encodeURIComponent(selectedSnapshotId)}`, {
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        const body = (await response.json()) as {
+          message?: unknown;
+          proof?: {
+            status?: unknown;
+            message?: unknown;
+            record?: {
+              fixtureId?: unknown;
+              sourceTimestamp?: unknown;
+              provider?: unknown;
+              market?: unknown;
+              messageId?: unknown;
+            } | null;
+            onChain?: {
+              dailyOddsPda?: unknown;
+              treeNodes?: unknown;
+            };
+          };
+        };
+        if (!response.ok || !body.proof) {
+          throw new Error(
+            typeof body.message === "string"
+              ? body.message
+              : "The quote-proof request could not be completed.",
+          );
+        }
+        const proof = body.proof;
+        const status =
+          proof.status === "VERIFIED_ONCHAIN"
+            ? "verified"
+            : proof.status === "PROOF_FETCHED"
+              ? "fetched"
+              : proof.status === "AWAITING_PROOF"
+                ? "awaiting"
+                : "unavailable";
+        const rawSourceTimestamp = proof.record?.sourceTimestamp;
+        const sourceTimestamp =
+          typeof rawSourceTimestamp === "number" ||
+          typeof rawSourceTimestamp === "string"
+            ? Number(rawSourceTimestamp)
+            : Number.NaN;
+        const treeNodes = Number(proof.onChain?.treeNodes);
+        if (!controller.signal.aborted) {
+          setQuoteProof({
+            status,
+            fixtureId:
+              typeof proof.record?.fixtureId === "number"
+                ? proof.record.fixtureId
+                : selectedSnapshotId,
+            sourceTimestamp: Number.isFinite(sourceTimestamp)
+              ? sourceTimestamp
+              : null,
+            provider:
+              typeof proof.record?.provider === "string" ? proof.record.provider : null,
+            market:
+              typeof proof.record?.market === "string" ? proof.record.market : null,
+            messageId:
+              typeof proof.record?.messageId === "string"
+                ? proof.record.messageId
+                : null,
+            dailyOddsPda:
+              typeof proof.onChain?.dailyOddsPda === "string"
+                ? proof.onChain.dailyOddsPda
+                : null,
+            treeNodes: Number.isSafeInteger(treeNodes) && treeNodes >= 0 ? treeNodes : 0,
+            message:
+              typeof proof.message === "string"
+                ? proof.message
+                : "The quote-proof receipt did not include a status message.",
+          });
+        }
+      })
+      .catch((error) => {
+        if (
+          controller.signal.aborted ||
+          (error instanceof DOMException && error.name === "AbortError")
+        ) {
+          return;
+        }
+        setQuoteProof({
+          status: "error",
+          fixtureId: selectedSnapshotId,
+          sourceTimestamp: null,
+          provider: null,
+          market: null,
+          messageId: null,
+          dailyOddsPda: null,
+          treeNodes: 0,
+          message: "The quote-proof check is temporarily unavailable. No proof badge was issued.",
+        });
+      });
+    return () => controller.abort();
+  }, [connector.status, selectedSnapshotId, sourceAsOf]);
   const historyObservation = useMemo(
     () => analyzeSnapshotHistory(localHistory.history),
     [localHistory.history],
@@ -1367,6 +1542,53 @@ export function OddPulseDashboard() {
             )}
           </div>
         </div>
+
+        <section
+          className={`quote-proof ${quoteProof.status}`}
+          aria-label="Read-only quote proof receipt"
+        >
+          <div className="quote-proof-heading">
+            <div>
+              <span className="section-kicker">QUOTE PROOF · READ-ONLY CHECK</span>
+              <h3>Selected quote receipt</h3>
+            </div>
+            <strong className="quote-proof-status" aria-live="polite">
+              {quoteProofStatusLabel(quoteProof.status)}
+            </strong>
+          </div>
+
+          <div className="quote-proof-grid">
+            <span>
+              <small>Source time</small>
+              <strong>{formatSnapshotTime(quoteProof.sourceTimestamp)}</strong>
+            </span>
+            <span>
+              <small>Record</small>
+              <strong>{abbreviateRecordId(quoteProof.messageId)}</strong>
+            </span>
+            <span>
+              <small>Market</small>
+              <strong>{quoteProof.market?.replaceAll("_", " ") ?? "—"}</strong>
+            </span>
+            <span>
+              <small>Odds root</small>
+              <strong>{abbreviateRecordId(quoteProof.dailyOddsPda)}</strong>
+            </span>
+          </div>
+
+          <p>{quoteProof.message}</p>
+          <small className="quote-proof-boundary">
+            It checks the selected quote against TxLINE&apos;s daily odds root. It never
+            signs, submits a transaction, turns the replay into a live signal, or
+            places a bet.
+            {quoteProof.provider
+              ? ` Provider: ${quoteProof.provider}.`
+              : ""}
+            {quoteProof.treeNodes
+              ? ` Proof nodes inspected: ${quoteProof.treeNodes}.`
+              : ""}
+          </small>
+        </section>
 
         <section
           className="evidence-panel"

@@ -26,11 +26,13 @@
     "dev": "node scripts/vinext.mjs dev",
     "build": "node scripts/vinext.mjs build",
     "start": "node scripts/vinext.mjs start",
-    "test": "npm run build && node --test tests/signal-engine.test.ts tests/snapshot-history.test.ts tests/rendered-html.test.mjs",
+    "test": "npm run build && node --test tests/signal-engine.test.ts tests/snapshot-history.test.ts tests/txline-normalize.test.ts tests/odds-proof.test.ts tests/rendered-html.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
+    "@coral-xyz/anchor": "0.32.1",
+    "@solana/web3.js": "1.98.4",
     "drizzle-orm": "0.45.2",
     "next": "16.2.6",
     "react": "19.2.6",
