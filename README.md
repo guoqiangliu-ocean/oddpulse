@@ -187,8 +187,8 @@ signed-byte proof parsing, and proof schema mismatch rejection.
   with selected/round-robin separation and per-fixture coverage status: complete
 - Complete-vector probability gate and authenticated World Cup fixture allowlist:
   complete
-- Read-only quote-proof receipt: complete in the release candidate; it stays
-  pending or unavailable unless a live Devnet `validateOdds` simulation passes
+- Read-only quote-proof receipt: deployed on 2026-07-15; it stays pending or
+  unavailable unless a live Devnet `validateOdds` simulation passes
 - Live signal history and multi-source quote pairing: not yet available; the
   dashboard signal output remains explicitly labelled synthetic replay
 - Public repository: available on [GitHub](https://github.com/guoqiangliu-ocean/oddpulse)
